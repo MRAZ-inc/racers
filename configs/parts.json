@@ -1,0 +1,80 @@
+{
+  "engine": {
+    "matrix": {
+      "metal": 1.0,
+      "wood": 0.8,
+      "resin": 0.6,
+      "plastic": 0.4
+    },
+    "params":
+    {
+      "max_speed": 1.0,
+      "acceleration": 0.5
+    }
+  },
+  "transmission": {
+    "matrix": {
+      "metal": 1.0,
+      "wood": 0.8,
+      "resin": 0.4,
+      "plastic": 0.6
+    },
+    "params":
+    {
+      "max_speed": 0.5,
+      "acceleration": 1.0
+    }
+  },
+  "body": {
+    "matrix": {
+      "metal": 0.4,
+      "wood": 0.6,
+      "resin": 0.8,
+      "plastic": 1.0
+    },
+    "params":
+    {
+      "max_speed": 1.0,
+      "handling": 0.5
+    }
+  },
+  "frame": {
+    "matrix": {
+      "metal": 0.8,
+      "wood": 1.0,
+      "resin": 0.4,
+      "plastic": 0.6
+    },
+    "params":
+    {
+      "handling": 1.0,
+      "max_speed": 0.5
+    }
+  },
+  "suspension": {
+    "matrix": {
+      "metal": 0.6,
+      "wood": 0.4,
+      "resin": 1.0,
+      "plastic": 0.8
+    },
+    "params":
+    {
+      "handling": 1.0,
+      "acceleration": 0.5
+    }
+  },
+  "wheels": {
+    "matrix": {
+      "metal": 0.6,
+      "wood": 0.8,
+      "resin": 1.0,
+      "plastic": 0.4
+    },
+    "params":
+    {
+      "acceleration": 1.0,
+      "handling": 0.5
+    }
+  }
+}
