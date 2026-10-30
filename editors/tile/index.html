@@ -1,0 +1,1107 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Редактор тайлов трассы</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #111318;
+  --panel: #1b1e26;
+  --panel2: #242833;
+  --border: #373c49;
+  --text: #e8eaf0;
+  --muted: #9ba3b5;
+  --accent: #70d6a1;
+  --danger: #f07878;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, sans-serif;
+}
+.app { max-width: 1400px; margin: auto; }
+h1 { margin: 0 0 8px; font-size: 26px; }
+h2 { margin: 0 0 12px; font-size: 17px; }
+p { margin: 0 0 12px; }
+.muted { color: var(--muted); font-size: 13px; }
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  align-items: start;
+  margin-top: 20px;
+}
+.panel {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+}
+.canvas-wrap { width: 100%; max-width: 850px; margin: auto; }
+canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #171a20;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  touch-action: none;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+button, select {
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel2);
+  color: var(--text);
+  font: inherit;
+}
+button { cursor: pointer; }
+button:hover { filter: brightness(1.15); }
+button.primary { background: #24553e; border-color: #39835e; }
+button.danger { background: #4d2929; border-color: #824747; }
+button:disabled { opacity: .4; cursor: not-allowed; }
+.section {
+  padding-bottom: 18px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+.section:last-child { padding: 0; margin: 0; border: 0; }
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+.field label { color: var(--muted); font-size: 13px; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.value-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+.status {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #252a34;
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.status.good { color: var(--accent); }
+.status.bad { color: var(--danger); }
+.point-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.point-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 12px;
+}
+.point-row.active { border-color: var(--accent); background: #24382f; }
+.point-row button { min-height: 30px; padding: 4px 8px; }
+.button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.button-grid button { width: 100%; }
+.file-input { display: none; }
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; display: inline-block; border-radius: 50%; }
+@media(max-width: 900px) {
+  body { padding: 12px; }
+  .layout { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+  <h1>Редактор тайлов трассы</h1>
+  <p class="muted">
+    Редактирование центральной линии дороги с ограничением минимального
+    внутреннего угла и фиксированными входом и выходом.
+  </p>
+
+  <div class="layout">
+    <main class="panel">
+      <div class="canvas-wrap">
+        <canvas id="canvas" width="800" height="800"></canvas>
+      </div>
+
+      <div class="legend">
+        <span><i class="dot" style="background:#70d6a1"></i> Вход</span>
+        <span><i class="dot" style="background:#f0b45e"></i> Выход</span>
+        <span><i class="dot" style="background:#70a8d6"></i> Фиксированный якорь</span>
+        <span><i class="dot" style="background:#f07878"></i> Выбранная точка</span>
+      </div>
+
+      <div class="toolbar">
+        <button id="addPoint" class="primary">Режим добавления: выкл.</button>
+        <button id="deletePoint" class="danger">Удалить точку</button>
+        <button id="rotate">Повернуть на 90°</button>
+        <button id="reverse">Развернуть направление</button>
+        <button id="reset">Сбросить тайл</button>
+      </div>
+
+      <div id="status" class="status">Готово.</div>
+    </main>
+
+    <aside class="panel">
+      <section class="section">
+        <h2>Геометрия</h2>
+
+        <div class="field">
+          <div class="value-line">
+            <label for="width">Ширина дороги</label>
+            <strong id="widthValue">90</strong>
+          </div>
+          <input id="width" type="range" min="30" max="180" value="90" step="5">
+        </div>
+
+        <div class="field">
+          <label for="angle">Минимальный внутренний угол</label>
+          <select id="angle">
+            <option value="30">30° — более острые повороты</option>
+            <option value="45" selected>45° — стандарт</option>
+            <option value="60">60° — более плавные повороты</option>
+          </select>
+        </div>
+
+        <p class="muted">
+          Чем больше значение, тем менее острые углы разрешены.
+          Например, при 45° внутренний угол в контрольной точке не может
+          быть меньше 45°. Прямой участок соответствует углу 180°.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>Вход и выход</h2>
+
+        <div class="field">
+          <label for="entry">Вход</label>
+          <select id="entry">
+            <option value="N">Север</option>
+            <option value="E">Восток</option>
+            <option value="S">Юг</option>
+            <option value="W" selected>Запад</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="exit">Выход</label>
+          <select id="exit">
+            <option value="N">Север</option>
+            <option value="E" selected>Восток</option>
+            <option value="S">Юг</option>
+            <option value="W">Запад</option>
+          </select>
+        </div>
+
+        <p class="muted">
+          От края тайла до фиксированного якоря центральная линия идёт прямо.
+          Длина этого участка равна ширине дороги и пересчитывается автоматически.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>Контрольные точки</h2>
+        <p class="muted">
+          Перетаскивай белые точки мышью. Для добавления включи режим
+          и нажми на центральную линию между фиксированными якорями.
+          Синие якоря и крайние точки закреплены.
+        </p>
+        <div id="pointList" class="point-list"></div>
+      </section>
+
+      <section class="section">
+        <h2>JSON</h2>
+        <div class="button-grid">
+          <button id="export">Экспорт JSON</button>
+          <button id="load">Загрузить JSON</button>
+        </div>
+        <input id="fileInput" class="file-input" type="file" accept=".json,application/json">
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const SIZE = 800;
+  const BORDER = 40;
+  const CENTER = SIZE / 2;
+  const SAMPLES = 20;
+
+  const $ = id => document.getElementById(id);
+  const canvas = $("canvas");
+  const ctx = canvas.getContext("2d");
+
+  const sides = ["N", "E", "S", "W"];
+
+  let points = [];
+  let nextId = 1;
+  let selected = -1;
+  let dragging = -1;
+  let addPointMode = false;
+
+  let roadWidth = 90;
+  let minInteriorAngle = 45;
+  let entry = "W";
+  let exit = "E";
+
+  function makePoint(x, y, role = "control") {
+    return { x, y, role, id: nextId++ };
+  }
+
+  function sidePosition(side) {
+    switch (side) {
+      case "N": return { x: CENTER, y: BORDER };
+      case "E": return { x: SIZE - BORDER, y: CENTER };
+      case "S": return { x: CENTER, y: SIZE - BORDER };
+      default: return { x: BORDER, y: CENTER };
+    }
+  }
+
+  function inwardVector(side) {
+    switch (side) {
+      case "N": return { x: 0, y: 1 };
+      case "E": return { x: -1, y: 0 };
+      case "S": return { x: 0, y: -1 };
+      default: return { x: 1, y: 0 };
+    }
+  }
+
+  function anchorPosition(side) {
+    const edge = sidePosition(side);
+    const inward = inwardVector(side);
+
+    return {
+      x: edge.x + inward.x * roadWidth,
+      y: edge.y + inward.y * roadWidth
+    };
+  }
+
+  function syncFixedPoints() {
+    for (const p of points) {
+      let position = null;
+
+      if (p.role === "entry") position = sidePosition(entry);
+      if (p.role === "entryAnchor") position = anchorPosition(entry);
+      if (p.role === "exitAnchor") position = anchorPosition(exit);
+      if (p.role === "exit") position = sidePosition(exit);
+
+      if (position) {
+        p.x = position.x;
+        p.y = position.y;
+      }
+    }
+  }
+
+  function resetTile() {
+    entry = "W";
+    exit = "E";
+    roadWidth = 90;
+    minInteriorAngle = 45;
+    nextId = 1;
+
+    points = [
+      makePoint(40, 400, "entry"),
+      makePoint(130, 400, "entryAnchor"),
+      makePoint(260, 400, "control"),
+      makePoint(540, 400, "control"),
+      makePoint(670, 400, "exitAnchor"),
+      makePoint(760, 400, "exit")
+    ];
+
+    selected = 2;
+    dragging = -1;
+    addPointMode = false;
+
+    $("width").value = roadWidth;
+    $("angle").value = minInteriorAngle;
+    $("entry").value = entry;
+    $("exit").value = exit;
+    $("widthValue").textContent = roadWidth;
+
+    updateAddButton();
+    setStatus("Тайл сброшен.", "good");
+    render();
+  }
+
+  // Catmull–Rom: сглаживание линии через контрольные точки.
+  function catmullRom(input, samples = SAMPLES) {
+    if (input.length < 2) {
+      return input.map(p => ({ x: p.x, y: p.y }));
+    }
+
+    const result = [];
+
+    for (let i = 0; i < input.length - 1; i++) {
+      const p0 = input[Math.max(0, i - 1)];
+      const p1 = input[i];
+      const p2 = input[i + 1];
+      const p3 = input[Math.min(input.length - 1, i + 2)];
+
+      for (let step = 0; step < samples; step++) {
+        const t = step / samples;
+        const t2 = t * t;
+        const t3 = t2 * t;
+
+        result.push({
+          x: 0.5 * (
+            2 * p1.x +
+            (-p0.x + p2.x) * t +
+            (2*p0.x - 5*p1.x + 4*p2.x - p3.x) * t2 +
+            (-p0.x + 3*p1.x - 3*p2.x + p3.x) * t3
+          ),
+          y: 0.5 * (
+            2 * p1.y +
+            (-p0.y + p2.y) * t +
+            (2*p0.y - 5*p1.y + 4*p2.y - p3.y) * t2 +
+            (-p0.y + 3*p1.y - 3*p2.y + p3.y) * t3
+          )
+        });
+      }
+    }
+
+    const last = input[input.length - 1];
+    result.push({ x: last.x, y: last.y });
+
+    return result;
+  }
+
+  function getCurve() {
+    // Фиксированные вход и выход — отдельные прямые участки.
+    // Сглаживаем только путь между внутренними якорями.
+    const middle = points.slice(1, -1);
+    const curvedMiddle = catmullRom(middle);
+
+    return [
+      { x: points[0].x, y: points[0].y },
+      ...curvedMiddle,
+      { x: points[points.length - 1].x, y: points[points.length - 1].y }
+    ];
+  }
+
+  function buildRoadPolygon(line, width) {
+    if (line.length < 2) return [];
+
+    const left = [];
+    const right = [];
+    const half = width / 2;
+
+    for (let i = 0; i < line.length; i++) {
+      const previous = line[Math.max(0, i - 1)];
+      const next = line[Math.min(line.length - 1, i + 1)];
+
+      let dx = next.x - previous.x;
+      let dy = next.y - previous.y;
+      const length = Math.hypot(dx, dy) || 1;
+
+      dx /= length;
+      dy /= length;
+
+      const nx = -dy;
+      const ny = dx;
+
+      left.push({
+        x: line[i].x + nx * half,
+        y: line[i].y + ny * half
+      });
+
+      right.push({
+        x: line[i].x - nx * half,
+        y: line[i].y - ny * half
+      });
+    }
+
+    return left.concat(right.reverse());
+  }
+
+  function distance(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  function nearestPoint(p, maxDistance = 28) {
+    let bestIndex = -1;
+    let bestDistance = maxDistance;
+
+    points.forEach((point, i) => {
+      const d = distance(p, point);
+
+      if (d < bestDistance) {
+        bestDistance = d;
+        bestIndex = i;
+      }
+    });
+
+    return bestIndex;
+  }
+
+  // Находит ближайшее место на кривой и индекс вставки
+  // именно в массив контрольных точек.
+  function nearestOnCurve(p) {
+    const middle = points.slice(1, -1);
+    if (middle.length < 2) return null;
+
+    const curve = catmullRom(middle);
+    let best = null;
+    let bestDistance = Infinity;
+
+    for (let i = 1; i < curve.length; i++) {
+      const a = curve[i - 1];
+      const b = curve[i];
+
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const denominator = dx * dx + dy * dy || 1;
+
+      const t = Math.max(0, Math.min(1,
+        ((p.x - a.x) * dx + (p.y - a.y) * dy) / denominator
+      ));
+
+      const candidate = {
+        x: a.x + t * dx,
+        y: a.y + t * dy
+      };
+
+      const d = distance(p, candidate);
+
+      if (d < bestDistance) {
+        bestDistance = d;
+
+        const segment = Math.min(
+          middle.length - 2,
+          Math.floor((i - 1) / SAMPLES)
+        );
+
+        best = {
+          x: candidate.x,
+          y: candidate.y,
+          insertIndex: segment + 2
+        };
+      }
+    }
+
+    return bestDistance < 32 ? best : null;
+  }
+
+  // Внутренний угол: между векторами от вершины к соседним точкам.
+  // Прямая линия = 180°, острый угол = малое значение.
+  function interiorAngle(a, b, c) {
+    const ux = a.x - b.x;
+    const uy = a.y - b.y;
+    const vx = c.x - b.x;
+    const vy = c.y - b.y;
+
+    const lengthU = Math.hypot(ux, uy);
+    const lengthV = Math.hypot(vx, vy);
+
+    if (lengthU < 0.001 || lengthV < 0.001) return 0;
+
+    const dot = (ux * vx + uy * vy) / (lengthU * lengthV);
+    const cosine = Math.max(-1, Math.min(1, dot));
+
+    return Math.acos(cosine) * 180 / Math.PI;
+  }
+
+  function isGeometryValid() {
+    for (let i = 1; i < points.length - 1; i++) {
+      const angle = interiorAngle(
+        points[i - 1],
+        points[i],
+        points[i + 1]
+      );
+
+      if (angle < minInteriorAngle - 0.01) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  function canvasPoint(event) {
+    const rect = canvas.getBoundingClientRect();
+
+    return {
+      x: (event.clientX - rect.left) * SIZE / rect.width,
+      y: (event.clientY - rect.top) * SIZE / rect.height
+    };
+  }
+
+  function clampPoint(p) {
+    return {
+      x: Math.max(BORDER, Math.min(SIZE - BORDER, p.x)),
+      y: Math.max(BORDER, Math.min(SIZE - BORDER, p.y))
+    };
+  }
+
+  function drawGrid() {
+    ctx.fillStyle = "#171a20";
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
+    ctx.strokeStyle = "#292e38";
+    ctx.lineWidth = 1;
+
+    for (let i = 0; i <= SIZE; i += 40) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i, SIZE);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(0, i);
+      ctx.lineTo(SIZE, i);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = "#596171";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(BORDER, BORDER, SIZE - BORDER * 2, SIZE - BORDER * 2);
+  }
+
+  function drawRoad() {
+    const curve = getCurve();
+    const polygon = buildRoadPolygon(curve, roadWidth);
+
+    if (polygon.length < 3) return;
+
+    ctx.beginPath();
+    ctx.moveTo(polygon[0].x, polygon[0].y);
+
+    for (let i = 1; i < polygon.length; i++) {
+      ctx.lineTo(polygon[i].x, polygon[i].y);
+    }
+
+    ctx.closePath();
+    ctx.fillStyle = "#626b79";
+    ctx.fill();
+
+    ctx.strokeStyle = "#929baa";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(curve[0].x, curve[0].y);
+
+    for (let i = 1; i < curve.length; i++) {
+      ctx.lineTo(curve[i].x, curve[i].y);
+    }
+
+    ctx.strokeStyle = "#d9dee8";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([12, 12]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function drawEndpoint(p, label, color) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#171a20";
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    ctx.font = "bold 14px system-ui";
+    ctx.textAlign = "center";
+    ctx.fillText(label, p.x, p.y - 23);
+  }
+
+  function controlNumber(index) {
+    let number = 0;
+
+    for (let i = 0; i <= index; i++) {
+      if (points[i].role === "control") number++;
+    }
+
+    return number;
+  }
+
+  function drawControlPoints() {
+    points.forEach((p, i) => {
+      if (p.role === "entry" || p.role === "exit") return;
+
+      const locked = p.role !== "control";
+      const active = i === selected;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, active ? 11 : locked ? 6 : 8, 0, Math.PI * 2);
+
+      if (active) ctx.fillStyle = "#f07878";
+      else if (locked) ctx.fillStyle = "#70a8d6";
+      else ctx.fillStyle = "#e8eaf0";
+
+      ctx.fill();
+      ctx.strokeStyle = "#171a20";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      if (!locked) {
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "12px system-ui";
+        ctx.textAlign = "left";
+        ctx.fillText(String(controlNumber(i)), p.x + 12, p.y - 10);
+      }
+    });
+  }
+
+  function renderPointList() {
+    const list = $("pointList");
+    list.replaceChildren();
+
+    points.forEach((p, i) => {
+      if (p.role !== "control") return;
+
+      const row = document.createElement("div");
+      row.className = "point-row" + (i === selected ? " active" : "");
+
+      const label = document.createElement("span");
+      label.textContent =
+        `Точка ${controlNumber(i)}: ${Math.round(p.x)}, ${Math.round(p.y)}`;
+
+      const button = document.createElement("button");
+      button.textContent = "Выбрать";
+      button.addEventListener("click", () => {
+        selected = i;
+        render();
+      });
+
+      row.append(label, button);
+      list.append(row);
+    });
+
+    if (list.children.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "Нет дополнительных контрольных точек.";
+      list.append(empty);
+    }
+  }
+
+  function render() {
+    drawGrid();
+    drawRoad();
+
+    drawEndpoint(points[0], "ВХОД", "#70d6a1");
+    drawEndpoint(points[points.length - 1], "ВЫХОД", "#f0b45e");
+
+    drawControlPoints();
+    renderPointList();
+
+    $("deletePoint").disabled =
+      selected < 0 || !points[selected] ||
+      points[selected].role !== "control";
+
+    $("widthValue").textContent = roadWidth;
+  }
+
+  function setStatus(message, type = "") {
+    const status = $("status");
+    status.textContent = message;
+    status.className = "status" + (type ? " " + type : "");
+  }
+
+  function updateAddButton() {
+    $("addPoint").textContent = addPointMode
+      ? "Режим добавления: вкл."
+      : "Режим добавления: выкл.";
+
+    $("addPoint").classList.toggle("primary", addPointMode);
+    canvas.style.cursor = addPointMode ? "copy" : "crosshair";
+  }
+
+  canvas.addEventListener("pointerdown", event => {
+    const p = canvasPoint(event);
+    const hit = nearestPoint(p, 28);
+
+    // Сначала выбираем существующую точку.
+    if (hit >= 0) {
+      selected = hit;
+
+      if (points[hit].role === "control") {
+        dragging = hit;
+        canvas.setPointerCapture(event.pointerId);
+      } else {
+        dragging = -1;
+      }
+
+      render();
+      return;
+    }
+
+    if (!addPointMode) return;
+
+    const near = nearestOnCurve(p);
+
+    if (!near) {
+      setStatus(
+        "Нажми ближе к центральной линии между фиксированными якорями.",
+        "bad"
+      );
+      return;
+    }
+
+    const newPoint = makePoint(near.x, near.y, "control");
+    points.splice(near.insertIndex, 0, newPoint);
+
+    if (!isGeometryValid()) {
+      points.splice(near.insertIndex, 1);
+      setStatus(
+        `Нельзя добавить точку: внутренний угол будет меньше ${minInteriorAngle}°.`,
+        "bad"
+      );
+      render();
+      return;
+    }
+
+    selected = near.insertIndex;
+    dragging = selected;
+    canvas.setPointerCapture(event.pointerId);
+
+    setStatus("Точка добавлена.", "good");
+    render();
+  });
+
+  canvas.addEventListener("pointermove", event => {
+    if (dragging < 0) return;
+
+    const p = clampPoint(canvasPoint(event));
+    const oldX = points[dragging].x;
+    const oldY = points[dragging].y;
+
+    points[dragging].x = p.x;
+    points[dragging].y = p.y;
+
+    if (!isGeometryValid()) {
+      points[dragging].x = oldX;
+      points[dragging].y = oldY;
+
+      setStatus(
+        `Перемещение отменено: внутренний угол не может быть меньше ${minInteriorAngle}°.`
+      );
+    } else {
+      setStatus("Точка перемещена.", "good");
+    }
+
+    render();
+  });
+
+  function stopDrag() {
+    dragging = -1;
+  }
+
+  canvas.addEventListener("pointerup", stopDrag);
+  canvas.addEventListener("pointercancel", stopDrag);
+  canvas.addEventListener("lostpointercapture", stopDrag);
+
+  $("addPoint").addEventListener("click", () => {
+    addPointMode = !addPointMode;
+    updateAddButton();
+
+    setStatus(addPointMode
+      ? "Режим включён. Нажми на центральную линию."
+      : "Режим добавления выключен.");
+  });
+
+  $("deletePoint").addEventListener("click", () => {
+    if (selected < 0 || points[selected]?.role !== "control") return;
+
+    points.splice(selected, 1);
+    selected = -1;
+
+    setStatus("Точка удалена.", "good");
+    render();
+  });
+
+  $("width").addEventListener("input", event => {
+    roadWidth = Number(event.target.value);
+    syncFixedPoints();
+    render();
+  });
+
+  $("angle").addEventListener("change", event => {
+    const previousAngle = minInteriorAngle;
+    minInteriorAngle = Number(event.target.value);
+
+    if (!isGeometryValid()) {
+      minInteriorAngle = previousAngle;
+      event.target.value = previousAngle;
+
+      setStatus(
+        "Текущая геометрия не подходит под этот минимальный угол. Сначала исправь форму дороги.",
+        "bad"
+      );
+      return;
+    }
+
+    setStatus(`Минимальный внутренний угол: ${minInteriorAngle}°.`, "good");
+    render();
+  });
+
+  $("entry").addEventListener("change", event => {
+    const nextEntry = event.target.value;
+
+    if (nextEntry === exit) {
+      event.target.value = entry;
+      setStatus("Вход и выход должны находиться на разных сторонах.", "bad");
+      return;
+    }
+
+    const previousEntry = entry;
+    entry = nextEntry;
+    syncFixedPoints();
+
+    if (!isGeometryValid()) {
+      entry = previousEntry;
+      syncFixedPoints();
+      event.target.value = entry;
+
+      setStatus(
+        "Новый вход создаёт слишком острый угол у фиксированного якоря.",
+        "bad"
+      );
+      render();
+      return;
+    }
+
+    setStatus("Сторона входа изменена.", "good");
+    render();
+  });
+
+  $("exit").addEventListener("change", event => {
+    const nextExit = event.target.value;
+
+    if (nextExit === entry) {
+      event.target.value = exit;
+      setStatus("Вход и выход должны находиться на разных сторонах.", "bad");
+      return;
+    }
+
+    const previousExit = exit;
+    exit = nextExit;
+    syncFixedPoints();
+
+    if (!isGeometryValid()) {
+      exit = previousExit;
+      syncFixedPoints();
+      event.target.value = exit;
+
+      setStatus(
+        "Новый выход создаёт слишком острый угол у фиксированного якоря.",
+        "bad"
+      );
+      render();
+      return;
+    }
+
+    setStatus("Сторона выхода изменена.", "good");
+    render();
+  });
+
+  $("rotate").addEventListener("click", () => {
+    points = points.map(p => ({
+      ...p,
+      x: SIZE - p.y,
+      y: p.x
+    }));
+
+    entry = sides[(sides.indexOf(entry) + 1) % 4];
+    exit = sides[(sides.indexOf(exit) + 1) % 4];
+
+    syncFixedPoints();
+
+    $("entry").value = entry;
+    $("exit").value = exit;
+
+    setStatus("Тайл повёрнут на 90° по часовой стрелке.", "good");
+    render();
+  });
+
+  $("reverse").addEventListener("click", () => {
+    points.reverse();
+
+    const previousEntry = entry;
+    entry = exit;
+    exit = previousEntry;
+
+    points.forEach(p => {
+      if (p.role === "entry") p.role = "exit";
+      else if (p.role === "exit") p.role = "entry";
+      else if (p.role === "entryAnchor") p.role = "exitAnchor";
+      else if (p.role === "exitAnchor") p.role = "entryAnchor";
+    });
+
+    syncFixedPoints();
+
+    $("entry").value = entry;
+    $("exit").value = exit;
+
+    selected = -1;
+    setStatus("Направление дороги развёрнуто.", "good");
+    render();
+  });
+
+  $("reset").addEventListener("click", () => {
+    if (confirm("Сбросить тайл и потерять текущие изменения?")) {
+      resetTile();
+    }
+  });
+
+  function exportData() {
+    return {
+      format: "track-tile",
+      version: 2,
+      tileSize: SIZE,
+      roadWidth,
+      minInteriorAngle,
+      entry,
+      exit,
+      points: points
+        .filter(p => p.role === "control")
+        .map((p, index) => ({
+          index,
+          x: Math.round(p.x * 100) / 100,
+          y: Math.round(p.y * 100) / 100
+        }))
+    };
+  }
+
+  $("export").addEventListener("click", () => {
+    const blob = new Blob(
+      [JSON.stringify(exportData(), null, 2)],
+      { type: "application/json" }
+    );
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = "track-tile.json";
+    link.click();
+
+    URL.revokeObjectURL(url);
+    setStatus("JSON экспортирован.", "good");
+  });
+
+  $("load").addEventListener("click", () => $("fileInput").click());
+
+  $("fileInput").addEventListener("change", async event => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const data = JSON.parse(await file.text());
+
+      if (
+        !data ||
+        !Array.isArray(data.points) ||
+        !["N", "E", "S", "W"].includes(data.entry) ||
+        !["N", "E", "S", "W"].includes(data.exit) ||
+        data.entry === data.exit
+      ) {
+        throw new Error("Неверная структура файла.");
+      }
+
+      if (data.points.some(p =>
+        !Number.isFinite(p.x) || !Number.isFinite(p.y)
+      )) {
+        throw new Error("У одной или нескольких точек некорректные координаты.");
+      }
+
+      entry = data.entry;
+      exit = data.exit;
+
+      roadWidth = Math.max(
+        30,
+        Math.min(180, Number(data.roadWidth) || 90)
+      );
+
+      minInteriorAngle = [30, 45, 60].includes(Number(data.minInteriorAngle))
+        ? Number(data.minInteriorAngle)
+        : 45;
+
+      nextId = 1;
+
+      const controls = data.points.map(p =>
+        makePoint(
+          Math.max(BORDER, Math.min(SIZE - BORDER, p.x)),
+          Math.max(BORDER, Math.min(SIZE - BORDER, p.y)),
+          "control"
+        )
+      );
+
+      points = [
+        makePoint(0, 0, "entry"),
+        makePoint(0, 0, "entryAnchor"),
+        ...controls,
+        makePoint(0, 0, "exitAnchor"),
+        makePoint(0, 0, "exit")
+      ];
+
+      syncFixedPoints();
+
+      $("width").value = roadWidth;
+      $("angle").value = minInteriorAngle;
+      $("entry").value = entry;
+      $("exit").value = exit;
+
+      selected = -1;
+
+      if (!isGeometryValid()) {
+        setStatus(
+          "Файл загружен, но некоторые внутренние углы меньше выбранного минимума. Перемещение точек будет ограничено.",
+          "bad"
+        );
+      } else {
+        setStatus(`Загружен файл: ${file.name}`, "good");
+      }
+
+      render();
+    } catch (error) {
+      setStatus(`Ошибка загрузки: ${error.message}`, "bad");
+    } finally {
+      event.target.value = "";
+    }
+  });
+
+  resetTile();
+})();
+</script>
+</body>
+</html>
