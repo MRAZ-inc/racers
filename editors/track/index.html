@@ -1,0 +1,1731 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Редактор гоночных трасс</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #111318;
+  --panel: #1b1e26;
+  --panel2: #252a34;
+  --border: #383e4b;
+  --text: #e8eaf0;
+  --muted: #9ba3b5;
+  --accent: #70d6a1;
+  --warning: #f0b45e;
+  --danger: #f07878;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 22px;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 system-ui, sans-serif;
+}
+.app { max-width: 1600px; margin: auto; }
+h1 { margin: 0 0 5px; font-size: 26px; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+p { margin: 0 0 10px; }
+.muted { color: var(--muted); font-size: 12px; }
+.layout {
+  display: grid;
+  grid-template-columns: minmax(500px, 1fr) 320px;
+  gap: 18px;
+  margin-top: 18px;
+  align-items: start;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  min-width: 0;
+}
+.canvas-scroll { overflow: auto; max-width: 100%; }
+canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #171a20;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  touch-action: manipulation;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+button, select {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 10px;
+  min-height: 36px;
+  font: inherit;
+}
+button { cursor: pointer; }
+button:hover { filter: brightness(1.15); }
+button:disabled { opacity: .4; cursor: not-allowed; }
+button.primary { background: #24553e; border-color: #39835e; }
+button.tool-active { background: #24553e; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.tool-button { min-width: 145px; }
+button.start-button { background: #244b39; border-color: #39835e; }
+button.finish-button { background: #4d3c24; border-color: #9b7138; }
+button.danger { background: #4d2929; border-color: #824747; }
+.field { display: flex; flex-direction: column; gap: 5px; margin: 10px 0; }
+.field label { color: var(--muted); font-size: 12px; }
+.field select { width: 100%; }
+.section {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+}
+.section:last-child { border: 0; padding-bottom: 0; margin-bottom: 0; }
+.tile-list { display: flex; flex-direction: column; gap: 7px; }
+.tile-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  padding: 9px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.tile-item.active { border-color: var(--accent); background: #24382f; }
+.tile-icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 5px;
+  background: #171a20;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  font-size: 20px;
+}
+.tile-name { font-weight: 600; overflow-wrap: anywhere; }
+.tile-meta { font-size: 11px; color: var(--muted); }
+.status {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 7px;
+  background: #252a34;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.status.good { color: var(--accent); }
+.status.warn { color: var(--warning); }
+.status.bad { color: var(--danger); }
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+.stat {
+  background: var(--panel2);
+  border-radius: 8px;
+  padding: 10px;
+}
+.stat-label { font-size: 11px; color: var(--muted); }
+.stat-value { font-size: 21px; font-weight: 650; }
+.two-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.two-buttons button { width: 100%; }
+.file-input { display: none; }
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.legend span { display: flex; align-items: center; gap: 5px; }
+.legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.endpoint-info {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--panel2);
+  margin-top: 10px;
+}
+.endpoint-row { display: flex; justify-content: space-between; gap: 8px; }
+@media (max-width: 950px) {
+  body { padding: 10px; }
+  .layout { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+  <h1>Редактор гоночных трасс</h1>
+  <p class="muted">
+    Сетка 20 × 20. Собирай трассу из тайлов, отмечай старт и финиш,
+    проверяй соединения и сохраняй результат в JSON.
+  </p>
+
+  <div class="layout">
+    <main class="panel">
+      <div class="canvas-scroll">
+        <canvas id="canvas" width="960" height="960"></canvas>
+      </div>
+
+      <div class="legend">
+        <span><i style="background:#70d6a1"></i> Соединённый порт</span>
+        <span><i style="background:#f0b45e"></i> Открытый порт</span>
+        <span><i style="background:#70d6a1"></i> Старт S</span>
+        <span><i style="background:#f0b45e"></i> Финиш F</span>
+        <span><i style="background:#f07878"></i> Выбранный тайл</span>
+      </div>
+
+      <div class="toolbar" aria-label="Инструмент редактирования">
+        <button id="toolPlace" class="tool-button tool-active" aria-pressed="true">✚ Размещение</button>
+        <button id="toolErase" class="tool-button" aria-pressed="false">▱ Ластик</button>
+      </div>
+
+      <div class="toolbar">
+        <button id="rotate" class="primary">Повернуть на 90°</button>
+        <button id="delete" class="danger">Удалить тайл</button>
+        <button id="clearCell">Очистить выбранную клетку</button>
+        <button id="clearAll">Очистить всё поле</button>
+      </div>
+
+      <div class="toolbar">
+        <button id="export" class="primary">Экспорт трассы JSON</button>
+        <button id="importTrack">Импорт трассы JSON</button>
+        <button id="loadTiles">Загрузить тайлы JSON</button>
+      </div>
+
+      <div id="status" class="status">Загрузи JSON-тайлы, чтобы начать сборку.</div>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">Занято клеток</div>
+          <div id="placedCount" class="stat-value">0 / 400</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Соединения</div>
+          <div id="connectionCount" class="stat-value">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Открытые порты</div>
+          <div id="openCount" class="stat-value">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Проверка</div>
+          <div id="validation" class="stat-value" style="font-size:15px">Нет данных</div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="panel">
+      <section class="section">
+        <h2>Библиотека тайлов</h2>
+        <p class="muted">
+          Выбери тайл, затем щёлкни по клетке поля.
+          Можно загрузить несколько JSON-файлов одновременно.
+        </p>
+
+        <button id="loadTiles2" class="primary" style="width:100%">
+          Загрузить JSON-тайлы
+        </button>
+
+        <div id="tileList" class="tile-list" style="margin-top:10px">
+          <p class="muted">Пока нет загруженных тайлов.</p>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Выбранная клетка</h2>
+        <div id="cellInfo" class="muted">Клетка не выбрана.</div>
+
+        <div class="field">
+          <label for="tileSelect">Тайл для размещения</label>
+          <select id="tileSelect">
+            <option value="">Нет загруженных тайлов</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Координаты клетки</label>
+          <div id="coordinates" style="font-weight:600">—</div>
+        </div>
+
+        <div class="field">
+          <label>Вход → выход после поворота</label>
+          <div id="ports" style="font-weight:600">—</div>
+        </div>
+
+        <div class="two-buttons">
+          <button id="place">Поставить тайл</button>
+          <button id="rotateCell">Повернуть тайл</button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Старт и финиш</h2>
+        <p class="muted">
+          Старт ставится на вход выбранного тайла, финиш — на выход.
+          Метки привязаны к логическому входу и выходу и поворачиваются вместе
+          с тайлом.
+        </p>
+
+        <div class="two-buttons">
+          <button id="setStart" class="start-button">Назначить старт</button>
+          <button id="setFinish" class="finish-button">Назначить финиш</button>
+        </div>
+
+        <div class="two-buttons" style="margin-top:7px">
+          <button id="clearStart">Убрать старт</button>
+          <button id="clearFinish">Убрать финиш</button>
+        </div>
+
+        <div class="endpoint-info">
+          <div class="endpoint-row">
+            <span class="muted">Старт</span>
+            <strong id="startInfo">Не назначен</strong>
+          </div>
+          <div class="endpoint-row">
+            <span class="muted">Финиш</span>
+            <strong id="finishInfo">Не назначен</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Проверка трассы</h2>
+        <p class="muted">
+          Для открытой трассы допустимы только два открытых порта:
+          стартовый вход и финишный выход. Если старт и финиш не заданы,
+          проверяется замкнутая трасса-кольцо.
+        </p>
+        <button id="check" style="width:100%">Проверить трассу</button>
+        <div id="checkDetails" class="status">Проверка ещё не запускалась.</div>
+      </section>
+
+      <section>
+        <h2>Управление</h2>
+        <p class="muted">
+          В режиме размещения щелчок по занятой клетке выбирает тайл,
+          а по пустой — ставит выбранный из библиотеки тайл. В режиме ластика
+          щелчок удаляет тайл только с поля, не из библиотеки. Стрелка на дороге
+          показывает направление движения от входа к выходу.
+        </p>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<input id="tileFiles" class="file-input" type="file" accept=".json,application/json" multiple>
+<input id="trackFile" class="file-input" type="file" accept=".json,application/json">
+
+<script>
+(() => {
+  "use strict";
+
+  const GRID = 20;
+  const CELL = 48;
+  const TILE_SIZE = 800;
+  const BORDER = 40;
+  const CENTER = TILE_SIZE / 2;
+  const SAMPLES = 20;
+
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  const $ = id => document.getElementById(id);
+
+  const sideOrder = ["N", "E", "S", "W"];
+  const sideNames = {
+    N: "Север",
+    E: "Восток",
+    S: "Юг",
+    W: "Запад"
+  };
+  const opposite = { N: "S", S: "N", E: "W", W: "E" };
+
+  const library = new Map();
+
+  let placements = Array(GRID * GRID).fill(null);
+  let selectedCell = -1;
+  let selectedTileId = null;
+  let currentTool = "place"; // place | erase
+
+  // Индексы клеток. Маркировка привязана к логическому порту тайла:
+  // start всегда относится к entry, finish всегда относится к exit.
+  let startCell = null;
+  let finishCell = null;
+
+  function setStatus(message, type = "") {
+    const element = $("status");
+    element.textContent = message;
+    element.className = "status" + (type ? " " + type : "");
+  }
+
+  function setCheckDetails(message, type = "") {
+    const element = $("checkDetails");
+    element.textContent = message;
+    element.className = "status" + (type ? " " + type : "");
+  }
+
+  function cellIndex(row, col) {
+    return row * GRID + col;
+  }
+
+  function cellCoordinates(index) {
+    return {
+      row: Math.floor(index / GRID),
+      col: index % GRID
+    };
+  }
+
+  function cellAtPoint(x, y) {
+    const col = Math.floor(x / CELL);
+    const row = Math.floor(y / CELL);
+
+    if (row < 0 || row >= GRID || col < 0 || col >= GRID) return -1;
+    return cellIndex(row, col);
+  }
+
+  function rotateSide(side, rotation) {
+    return sideOrder[
+      (sideOrder.indexOf(side) + rotation + 4) % 4
+    ];
+  }
+
+  function rotatePoint(p, rotation) {
+    let x = p.x;
+    let y = p.y;
+
+    for (let i = 0; i < rotation; i++) {
+      const nextX = TILE_SIZE - y;
+      const nextY = x;
+      x = nextX;
+      y = nextY;
+    }
+
+    return { x, y };
+  }
+
+  function getTilePorts(tile, rotation = 0) {
+    return [
+      rotateSide(tile.entry, rotation),
+      rotateSide(tile.exit, rotation)
+    ];
+  }
+
+  function sidePosition(side) {
+    switch (side) {
+      case "N": return { x: CENTER, y: BORDER };
+      case "E": return { x: TILE_SIZE - BORDER, y: CENTER };
+      case "S": return { x: CENTER, y: TILE_SIZE - BORDER };
+      default: return { x: BORDER, y: CENTER };
+    }
+  }
+
+  function inwardVector(side) {
+    switch (side) {
+      case "N": return { x: 0, y: 1 };
+      case "E": return { x: -1, y: 0 };
+      case "S": return { x: 0, y: -1 };
+      default: return { x: 1, y: 0 };
+    }
+  }
+
+  function anchorPosition(side, width) {
+    const edge = sidePosition(side);
+    const inward = inwardVector(side);
+
+    return {
+      x: edge.x + inward.x * width,
+      y: edge.y + inward.y * width
+    };
+  }
+
+  function catmullRom(input, samples = SAMPLES) {
+    if (input.length < 2) {
+      return input.map(p => ({ x: p.x, y: p.y }));
+    }
+
+    const result = [];
+
+    for (let i = 0; i < input.length - 1; i++) {
+      const p0 = input[Math.max(0, i - 1)];
+      const p1 = input[i];
+      const p2 = input[i + 1];
+      const p3 = input[Math.min(input.length - 1, i + 2)];
+
+      for (let step = 0; step < samples; step++) {
+        const t = step / samples;
+        const t2 = t * t;
+        const t3 = t2 * t;
+
+        result.push({
+          x: 0.5 * (
+            2 * p1.x +
+            (-p0.x + p2.x) * t +
+            (2*p0.x - 5*p1.x + 4*p2.x - p3.x) * t2 +
+            (-p0.x + 3*p1.x - 3*p2.x + p3.x) * t3
+          ),
+          y: 0.5 * (
+            2 * p1.y +
+            (-p0.y + p2.y) * t +
+            (2*p0.y - 5*p1.y + 4*p2.y - p3.y) * t2 +
+            (-p0.y + 3*p1.y - 3*p2.y + p3.y) * t3
+          )
+        });
+      }
+    }
+
+    const last = input[input.length - 1];
+    result.push({ x: last.x, y: last.y });
+
+    return result;
+  }
+
+  function buildTileCurve(tile) {
+    const width = Math.max(1, Number(tile.roadWidth) || 90);
+    const entry = sidePosition(tile.entry);
+    const exit = sidePosition(tile.exit);
+    const entryAnchor = anchorPosition(tile.entry, width);
+    const exitAnchor = anchorPosition(tile.exit, width);
+
+    const controls = Array.isArray(tile.points)
+      ? tile.points.map(p => ({
+          x: Number(p.x),
+          y: Number(p.y)
+        })).filter(p => Number.isFinite(p.x) && Number.isFinite(p.y))
+      : [];
+
+    const middle = [entryAnchor, ...controls, exitAnchor];
+
+    return [
+      entry,
+      ...catmullRom(middle),
+      exit
+    ];
+  }
+
+  function buildRoadPolygon(line, width) {
+    if (line.length < 2) return [];
+
+    const left = [];
+    const right = [];
+    const half = width / 2;
+
+    for (let i = 0; i < line.length; i++) {
+      const previous = line[Math.max(0, i - 1)];
+      const next = line[Math.min(line.length - 1, i + 1)];
+
+      let dx = next.x - previous.x;
+      let dy = next.y - previous.y;
+      const length = Math.hypot(dx, dy) || 1;
+
+      dx /= length;
+      dy /= length;
+
+      const nx = -dy;
+      const ny = dx;
+
+      left.push({
+        x: line[i].x + nx * half,
+        y: line[i].y + ny * half
+      });
+
+      right.push({
+        x: line[i].x - nx * half,
+        y: line[i].y - ny * half
+      });
+    }
+
+    return left.concat(right.reverse());
+  }
+
+  function mapTilePoint(point, rotation, x, y, scale) {
+    const rotated = rotatePoint(point, rotation);
+    return {
+      x: x + rotated.x * scale,
+      y: y + rotated.y * scale
+    };
+  }
+
+  // Рисует небольшую стрелку по центру дороги в направлении entry → exit.
+  // Позиция и касательная берутся из уже построенной кривой, поэтому стрелка
+  // следует поворотам дороги и автоматически вращается вместе с тайлом.
+  function drawDirectionArrow(curve, rotation, x, y, scale) {
+    if (!Array.isArray(curve) || curve.length < 3) return;
+
+    const lengths = [];
+    let totalLength = 0;
+    for (let i = 1; i < curve.length; i++) {
+      const length = Math.hypot(
+        curve[i].x - curve[i - 1].x,
+        curve[i].y - curve[i - 1].y
+      );
+      lengths.push(length);
+      totalLength += length;
+    }
+    if (totalLength <= 0) return;
+
+    // Ставим стрелку немного дальше середины, чтобы она не перекрывала порты.
+    const targetDistance = totalLength * 0.58;
+    let travelled = 0;
+    let segment = 0;
+    while (segment < lengths.length - 1 && travelled + lengths[segment] < targetDistance) {
+      travelled += lengths[segment];
+      segment++;
+    }
+
+    const a = curve[segment];
+    const b = curve[segment + 1];
+    const segmentLength = lengths[segment] || 1;
+    const t = Math.max(0, Math.min(1, (targetDistance - travelled) / segmentLength));
+    const point = {
+      x: a.x + (b.x - a.x) * t,
+      y: a.y + (b.y - a.y) * t
+    };
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const length = Math.hypot(dx, dy) || 1;
+    let ux = dx / length;
+    let uy = dy / length;
+    // Поворачиваем и направление касательной тем же преобразованием,
+    // что и геометрию тайла: (x, y) -> (-y, x).
+    for (let i = 0; i < rotation; i++) {
+      const nextUx = -uy;
+      const nextUy = ux;
+      ux = nextUx;
+      uy = nextUy;
+    }
+
+    const center = mapTilePoint(point, rotation, x, y, scale);
+    // На сетке размер остаётся читаемым даже при уменьшенном масштабе тайла.
+    const arrowLength = Math.max(5.5, 8.5 * scale / (CELL / TILE_SIZE));
+    const headLength = Math.max(2.5, 3.2 * scale / (CELL / TILE_SIZE));
+    const halfWidth = Math.max(1.8, 2.2 * scale / (CELL / TILE_SIZE));
+    const tip = { x: center.x + ux * arrowLength / 2, y: center.y + uy * arrowLength / 2 };
+    const tail = { x: center.x - ux * arrowLength / 2, y: center.y - uy * arrowLength / 2 };
+    const base = { x: tip.x - ux * headLength, y: tip.y - uy * headLength };
+
+    // Обводка делает стрелку заметной и на светлой, и на тёмной дороге.
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#171a20";
+    ctx.lineWidth = 3.2;
+    ctx.beginPath();
+    ctx.moveTo(tail.x, tail.y);
+    ctx.lineTo(tip.x, tip.y);
+    ctx.moveTo(base.x - uy * halfWidth, base.y + ux * halfWidth);
+    ctx.lineTo(tip.x, tip.y);
+    ctx.lineTo(base.x + uy * halfWidth, base.y - ux * halfWidth);
+    ctx.stroke();
+
+    ctx.strokeStyle = "#f4f7ff";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(tail.x, tail.y);
+    ctx.lineTo(tip.x, tip.y);
+    ctx.moveTo(base.x - uy * halfWidth, base.y + ux * halfWidth);
+    ctx.lineTo(tip.x, tip.y);
+    ctx.lineTo(base.x + uy * halfWidth, base.y - ux * halfWidth);
+    ctx.stroke();
+  }
+
+  function drawTile(tile, rotation, x, y, scale, isSelected = false) {
+    const width = Math.max(1, Number(tile.roadWidth) || 90);
+    const curve = buildTileCurve(tile);
+    const polygon = buildRoadPolygon(curve, width);
+
+    if (polygon.length < 3) return;
+
+    ctx.beginPath();
+
+    polygon.forEach((p, i) => {
+      const q = mapTilePoint(p, rotation, x, y, scale);
+      if (i === 0) ctx.moveTo(q.x, q.y);
+      else ctx.lineTo(q.x, q.y);
+    });
+
+    ctx.closePath();
+    ctx.fillStyle = "#626b79";
+    ctx.fill();
+
+    ctx.strokeStyle = "#9aa4b4";
+    ctx.lineWidth = Math.max(0.6, 1.3 * scale / (CELL / 48));
+    ctx.stroke();
+
+    ctx.beginPath();
+
+    curve.forEach((p, i) => {
+      const q = mapTilePoint(p, rotation, x, y, scale);
+      if (i === 0) ctx.moveTo(q.x, q.y);
+      else ctx.lineTo(q.x, q.y);
+    });
+
+    ctx.strokeStyle = "#d9dee8";
+    ctx.lineWidth = Math.max(0.5, 1.2 * scale);
+    ctx.setLineDash([4 * scale, 5 * scale]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Одна стрелка на дороге: строго по направлению от входа к выходу.
+    drawDirectionArrow(curve, rotation, x, y, scale);
+
+    // Порты для обычного отображения. Координаты исходные,
+    // поэтому поворот применяется ровно один раз.
+    for (const originalSide of [tile.entry, tile.exit]) {
+      const p = sidePosition(originalSide);
+      const q = mapTilePoint(p, rotation, x, y, scale);
+
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, Math.max(2, 3 * scale), 0, Math.PI * 2);
+      ctx.fillStyle = isSelected ? "#f07878" : "#70a8d6";
+      ctx.fill();
+    }
+  }
+
+  function getPlacementPorts(index) {
+    const placement = placements[index];
+    if (!placement) return [];
+
+    const tile = library.get(placement.tileId);
+    if (!tile) return [];
+
+    return getTilePorts(tile, placement.rotation);
+  }
+
+  function getPortLocation(index, side) {
+    const { row, col } = cellCoordinates(index);
+
+    return {
+      x: col * CELL + sidePosition(side).x * (CELL / TILE_SIZE),
+      y: row * CELL + sidePosition(side).y * (CELL / TILE_SIZE)
+    };
+  }
+
+  function portIsConnected(index, side) {
+    const { row, col } = cellCoordinates(index);
+    let nr = row;
+    let nc = col;
+
+    if (side === "N") nr--;
+    if (side === "S") nr++;
+    if (side === "W") nc--;
+    if (side === "E") nc++;
+
+    if (nr < 0 || nr >= GRID || nc < 0 || nc >= GRID) return false;
+
+    const neighborIndex = cellIndex(nr, nc);
+    const neighborPorts = getPlacementPorts(neighborIndex);
+
+    return neighborPorts.includes(opposite[side]);
+  }
+
+  function isStartPort(index, side) {
+    if (startCell !== index || !placements[index]) return false;
+
+    const placement = placements[index];
+    const tile = library.get(placement.tileId);
+    if (!tile) return false;
+
+    return rotateSide(tile.entry, placement.rotation) === side;
+  }
+
+  function isFinishPort(index, side) {
+    if (finishCell !== index || !placements[index]) return false;
+
+    const placement = placements[index];
+    const tile = library.get(placement.tileId);
+    if (!tile) return false;
+
+    return rotateSide(tile.exit, placement.rotation) === side;
+  }
+
+  function drawPortStatus(index, side) {
+    const ports = getPlacementPorts(index);
+    if (!ports.includes(side)) return;
+
+    const connected = portIsConnected(index, side);
+    const start = isStartPort(index, side);
+    const finish = isFinishPort(index, side);
+
+    // ВАЖНО: side уже повёрнут. Поэтому берём координату
+    // непосредственно на этой стороне и больше не поворачиваем её.
+    const p = sidePosition(side);
+    const { row, col } = cellCoordinates(index);
+    const scale = CELL / TILE_SIZE;
+
+    const q = {
+      x: col * CELL + p.x * scale,
+      y: row * CELL + p.y * scale
+    };
+
+    // Слегка смещаем значок внутрь клетки, чтобы он не обрезался краем.
+    const inward = inwardVector(side);
+    q.x += inward.x * 7;
+    q.y += inward.y * 7;
+
+    if (start || finish) {
+      const label = start ? "S" : "F";
+      const color = start ? "#70d6a1" : "#f0b45e";
+
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, 7, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "#111318";
+      ctx.stroke();
+
+      ctx.fillStyle = "#111318";
+      ctx.font = "bold 9px system-ui";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, q.x, q.y + 0.5);
+      ctx.textBaseline = "alphabetic";
+      return;
+    }
+
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, 3.2, 0, Math.PI * 2);
+    ctx.fillStyle = connected ? "#70d6a1" : "#f0b45e";
+    ctx.fill();
+    ctx.strokeStyle = "#171a20";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  function drawGrid() {
+    ctx.fillStyle = "#171a20";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = "#303642";
+    ctx.lineWidth = 1;
+
+    for (let i = 0; i <= GRID; i++) {
+      const p = i * CELL;
+
+      ctx.beginPath();
+      ctx.moveTo(p, 0);
+      ctx.lineTo(p, canvas.height);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(0, p);
+      ctx.lineTo(canvas.width, p);
+      ctx.stroke();
+    }
+  }
+
+  function drawEndpointMarker(index, type) {
+    if (index === null || !placements[index]) return;
+
+    const placement = placements[index];
+    const tile = library.get(placement.tileId);
+    if (!tile) return;
+
+    const side = type === "start"
+      ? rotateSide(tile.entry, placement.rotation)
+      : rotateSide(tile.exit, placement.rotation);
+
+    const p = sidePosition(side);
+    const { row, col } = cellCoordinates(index);
+    const scale = CELL / TILE_SIZE;
+    const inward = inwardVector(side);
+
+    const x = col * CELL + p.x * scale + inward.x * 7;
+    const y = row * CELL + p.y * scale + inward.y * 7;
+
+    const color = type === "start" ? "#70d6a1" : "#f0b45e";
+    const label = type === "start" ? "S" : "F";
+
+    ctx.beginPath();
+    ctx.arc(x, y, 7, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = "#111318";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = "#111318";
+    ctx.font = "bold 9px system-ui";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, x, y + 0.5);
+    ctx.textBaseline = "alphabetic";
+  }
+
+  function setTool(tool) {
+    currentTool = tool;
+    const placeButton = $("toolPlace");
+    const eraseButton = $("toolErase");
+    placeButton.classList.toggle("tool-active", tool === "place");
+    eraseButton.classList.toggle("tool-active", tool === "erase");
+    placeButton.setAttribute("aria-pressed", String(tool === "place"));
+    eraseButton.setAttribute("aria-pressed", String(tool === "erase"));
+    setStatus(tool === "erase"
+      ? "Выбран ластик. Щёлкни по тайлу на сетке, чтобы убрать его; библиотека не изменится."
+      : "Выбрано размещение. Щёлкни по пустой клетке, чтобы поставить выбранный тайл.");
+  }
+
+  function render() {
+    drawGrid();
+
+    for (let index = 0; index < placements.length; index++) {
+      const placement = placements[index];
+      if (!placement) continue;
+
+      const tile = library.get(placement.tileId);
+      if (!tile) continue;
+
+      const { row, col } = cellCoordinates(index);
+      drawTile(
+        tile,
+        placement.rotation,
+        col * CELL,
+        row * CELL,
+        CELL / TILE_SIZE,
+        index === selectedCell
+      );
+    }
+
+    // Обычные маркеры соединений.
+    for (let index = 0; index < placements.length; index++) {
+      if (!placements[index]) continue;
+
+      for (const side of getPlacementPorts(index)) {
+        drawPortStatus(index, side);
+      }
+    }
+
+    // Старт и финиш рисуем последними поверх остальных маркеров.
+    drawEndpointMarker(startCell, "start");
+    drawEndpointMarker(finishCell, "finish");
+
+    if (selectedCell >= 0) {
+      const { row, col } = cellCoordinates(selectedCell);
+      ctx.strokeStyle = "#f07878";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(col * CELL + 1, row * CELL + 1, CELL - 2, CELL - 2);
+    }
+
+    updateStats();
+    updateCellInfo();
+    updateEndpointInfo();
+  }
+
+  function calculateConnections() {
+    let connections = 0;
+    let openPorts = 0;
+    const unmatched = [];
+
+    for (let index = 0; index < placements.length; index++) {
+      if (!placements[index]) continue;
+
+      for (const side of getPlacementPorts(index)) {
+        if (portIsConnected(index, side)) {
+          connections++;
+        } else {
+          openPorts++;
+          unmatched.push({ index, side });
+        }
+      }
+    }
+
+    return {
+      connections: connections / 2,
+      openPorts,
+      unmatched
+    };
+  }
+
+  function getConnectedComponents() {
+    const occupied = [];
+
+    for (let i = 0; i < placements.length; i++) {
+      if (placements[i]) occupied.push(i);
+    }
+
+    const visited = new Set();
+    const components = [];
+
+    for (const start of occupied) {
+      if (visited.has(start)) continue;
+
+      const queue = [start];
+      const component = [];
+      visited.add(start);
+
+      while (queue.length) {
+        const current = queue.shift();
+        component.push(current);
+
+        for (const side of getPlacementPorts(current)) {
+          if (!portIsConnected(current, side)) continue;
+
+          const { row, col } = cellCoordinates(current);
+          let nr = row;
+          let nc = col;
+
+          if (side === "N") nr--;
+          if (side === "S") nr++;
+          if (side === "W") nc--;
+          if (side === "E") nc++;
+
+          if (nr < 0 || nr >= GRID || nc < 0 || nc >= GRID) continue;
+
+          const neighbor = cellIndex(nr, nc);
+
+          if (placements[neighbor] && !visited.has(neighbor)) {
+            visited.add(neighbor);
+            queue.push(neighbor);
+          }
+        }
+      }
+
+      components.push(component);
+    }
+
+    return components;
+  }
+
+  function updateStats() {
+    const count = placements.filter(Boolean).length;
+    const result = calculateConnections();
+
+    $("placedCount").textContent = `${count} / ${GRID * GRID}`;
+    $("connectionCount").textContent = String(result.connections);
+    $("openCount").textContent = String(result.openPorts);
+
+    const endpointsAssigned = startCell !== null && finishCell !== null;
+    const noEndpoints = startCell === null && finishCell === null;
+
+    let label = "Не проверена";
+    let color = "var(--muted)";
+
+    if (count === 0) {
+      label = "Нет тайлов";
+    } else if (endpointsAssigned && result.openPorts === 2) {
+      label = "Открытая трасса";
+      color = "var(--warning)";
+    } else if (noEndpoints && result.openPorts === 0) {
+      label = "Замкнутая трасса";
+      color = "var(--accent)";
+    } else if (result.openPorts > 0) {
+      label = "Есть разрывы";
+      color = "var(--warning)";
+    } else if (endpointsAssigned) {
+      label = "Проверь метки";
+      color = "var(--warning)";
+    }
+
+    $("validation").textContent = label;
+    $("validation").style.color = color;
+  }
+
+  function updateCellInfo() {
+    if (selectedCell < 0) {
+      $("cellInfo").textContent = "Клетка не выбрана.";
+      $("coordinates").textContent = "—";
+      $("ports").textContent = "—";
+      $("delete").disabled = true;
+      $("clearCell").disabled = true;
+      $("rotate").disabled = true;
+      $("rotateCell").disabled = true;
+      $("place").disabled = !selectedTileId;
+      $("setStart").disabled = true;
+      $("setFinish").disabled = true;
+      return;
+    }
+
+    const { row, col } = cellCoordinates(selectedCell);
+    const placement = placements[selectedCell];
+
+    $("coordinates").textContent = `Строка ${row + 1}, столбец ${col + 1}`;
+
+    if (!placement) {
+      $("cellInfo").textContent = "Клетка пустая.";
+      $("ports").textContent = "—";
+      $("delete").disabled = true;
+      $("clearCell").disabled = true;
+      $("rotate").disabled = true;
+      $("rotateCell").disabled = true;
+      $("place").disabled = !selectedTileId;
+      $("setStart").disabled = true;
+      $("setFinish").disabled = true;
+      return;
+    }
+
+    const tile = library.get(placement.tileId);
+
+    if (!tile) {
+      $("cellInfo").textContent = "Тайл отсутствует в библиотеке.";
+      $("ports").textContent = "—";
+      return;
+    }
+
+    const ports = getTilePorts(tile, placement.rotation);
+
+    $("cellInfo").textContent =
+      `${tile.name} — поворот ${placement.rotation * 90}°`;
+
+    $("ports").textContent =
+      `${sideNames[ports[0]]} → ${sideNames[ports[1]]}`;
+
+    $("delete").disabled = false;
+    $("clearCell").disabled = false;
+    $("rotate").disabled = false;
+    $("rotateCell").disabled = false;
+    $("place").disabled = !selectedTileId;
+    $("setStart").disabled = false;
+    $("setFinish").disabled = false;
+  }
+
+  function updateEndpointInfo() {
+    function describe(index, type) {
+      if (index === null) return "Не назначен";
+      if (!placements[index]) return "Тайл отсутствует";
+
+      const placement = placements[index];
+      const tile = library.get(placement.tileId);
+      if (!tile) return "Тайл отсутствует";
+
+      const { row, col } = cellCoordinates(index);
+      const side = type === "start"
+        ? rotateSide(tile.entry, placement.rotation)
+        : rotateSide(tile.exit, placement.rotation);
+
+      return `(${row + 1}, ${col + 1}), ${sideNames[side]}`;
+    }
+
+    $("startInfo").textContent = describe(startCell, "start");
+    $("finishInfo").textContent = describe(finishCell, "finish");
+
+    $("clearStart").disabled = startCell === null;
+    $("clearFinish").disabled = finishCell === null;
+  }
+
+  function checkTrack() {
+    const count = placements.filter(Boolean).length;
+
+    if (count === 0) {
+      setCheckDetails("На поле нет тайлов.", "warn");
+      setStatus("Сначала размести хотя бы один тайл.", "warn");
+      return;
+    }
+
+    const result = calculateConnections();
+    const components = getConnectedComponents();
+
+    const hasStart = startCell !== null;
+    const hasFinish = finishCell !== null;
+    const openKey = item => `${item.index}:${item.side}`;
+
+    const expectedOpen = new Set();
+
+    if (hasStart && placements[startCell]) {
+      const tile = library.get(placements[startCell].tileId);
+      const side = rotateSide(tile.entry, placements[startCell].rotation);
+      expectedOpen.add(openKey({ index: startCell, side }));
+    }
+
+    if (hasFinish && placements[finishCell]) {
+      const tile = library.get(placements[finishCell].tileId);
+      const side = rotateSide(tile.exit, placements[finishCell].rotation);
+      expectedOpen.add(openKey({ index: finishCell, side }));
+    }
+
+    const actualOpen = new Set(result.unmatched.map(openKey));
+    const unexpectedOpen = result.unmatched.filter(
+      item => !expectedOpen.has(openKey(item))
+    );
+
+    const missingExpected = [...expectedOpen].filter(
+      key => !actualOpen.has(key)
+    );
+
+    const connected = components.length === 1;
+    const noEndpoints = !hasStart && !hasFinish;
+    const exactlyOneEndpoint = hasStart !== hasFinish;
+
+    const messages = [];
+    let valid = true;
+
+    if (exactlyOneEndpoint) {
+      valid = false;
+      messages.push("Назначь и старт, и финиш.");
+    }
+
+    if (hasStart && !placements[startCell]) {
+      valid = false;
+      messages.push("Старт находится на пустой клетке.");
+    }
+
+    if (hasFinish && !placements[finishCell]) {
+      valid = false;
+      messages.push("Финиш находится на пустой клетке.");
+    }
+
+    if (!connected) {
+      valid = false;
+      messages.push(`Трасса разделена на ${components.length} несвязанных участков.`);
+    }
+
+    if (noEndpoints) {
+      if (result.openPorts !== 0) {
+        valid = false;
+        messages.push(
+          `Для кольцевой трассы все порты должны быть соединены. Открытых портов: ${result.openPorts}.`
+        );
+      } else {
+        messages.push("Все порты соединены: проверяется замкнутая трасса.");
+      }
+    } else if (hasStart && hasFinish && placements[startCell] && placements[finishCell]) {
+      if (unexpectedOpen.length > 0) {
+        valid = false;
+        messages.push(
+          `Есть лишние открытые порты: ${unexpectedOpen.length}.`
+        );
+      }
+
+      if (missingExpected.length > 0) {
+        valid = false;
+        messages.push(
+          "Стартовый вход или финишный выход физически соединён с другим тайлом. Для открытой трассы они должны быть концами маршрута."
+        );
+      }
+
+      if (result.openPorts !== 2) {
+        valid = false;
+        messages.push(
+          `Для открытой трассы ожидаются ровно 2 открытых порта — старт и финиш. Сейчас: ${result.openPorts}.`
+        );
+      }
+
+      if (valid) {
+        messages.push("Старт и финиш корректны, все тайлы соединены в один маршрут.");
+      }
+    }
+
+    if (valid) {
+      setCheckDetails(
+        `Трасса целостна. Тайлов: ${count}. Соединений: ${result.connections}. ` +
+        (noEndpoints ? "Тип: кольцо." : "Тип: открытый маршрут от старта до финиша."),
+        "good"
+      );
+      setStatus("Проверка пройдена.", "good");
+    } else {
+      setCheckDetails(messages.join(" "), "warn");
+      setStatus("Проверка обнаружила проблемы. Проверь жёлтые порты и метки.", "warn");
+    }
+
+    render();
+  }
+
+  function renderTileList() {
+    const list = $("tileList");
+    const select = $("tileSelect");
+
+    list.replaceChildren();
+    select.replaceChildren();
+
+    if (library.size === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "Пока нет загруженных тайлов.";
+      list.append(empty);
+
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "Нет загруженных тайлов";
+      select.append(option);
+
+      selectedTileId = null;
+      return;
+    }
+
+    for (const [id, tile] of library.entries()) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "tile-item" + (id === selectedTileId ? " active" : "");
+
+      const icon = document.createElement("div");
+      icon.className = "tile-icon";
+      icon.textContent = "↗";
+
+      const details = document.createElement("div");
+      const name = document.createElement("div");
+      name.className = "tile-name";
+      name.textContent = tile.name;
+
+      const meta = document.createElement("div");
+      meta.className = "tile-meta";
+      meta.textContent =
+        `${sideNames[tile.entry]} → ${sideNames[tile.exit]} · ширина ${tile.roadWidth}`;
+
+      details.append(name, meta);
+      button.append(icon, details);
+
+      button.addEventListener("click", () => {
+        selectedTileId = id;
+        select.value = id;
+        renderTileList();
+        setStatus(`Выбран тайл «${tile.name}». Щёлкни по пустой клетке для размещения.`);
+        render();
+      });
+
+      list.append(button);
+
+      const option = document.createElement("option");
+      option.value = id;
+      option.textContent = tile.name;
+      select.append(option);
+    }
+
+    if (!selectedTileId || !library.has(selectedTileId)) {
+      selectedTileId = library.keys().next().value;
+    }
+
+    select.value = selectedTileId;
+  }
+
+  function validateTile(data) {
+    if (!data || typeof data !== "object") {
+      throw new Error("Файл не содержит объект тайла.");
+    }
+
+    if (!["N", "E", "S", "W"].includes(data.entry) ||
+        !["N", "E", "S", "W"].includes(data.exit)) {
+      throw new Error("У тайла некорректные вход или выход.");
+    }
+
+    if (data.entry === data.exit) {
+      throw new Error("Вход и выход должны находиться на разных сторонах.");
+    }
+
+    if (!Array.isArray(data.points)) {
+      throw new Error("В файле нет массива контрольных точек.");
+    }
+
+    for (const p of data.points) {
+      if (!Number.isFinite(Number(p.x)) || !Number.isFinite(Number(p.y))) {
+        throw new Error("Обнаружена точка с некорректными координатами.");
+      }
+    }
+
+    return true;
+  }
+
+  async function loadTileFiles(files) {
+    let loaded = 0;
+    const errors = [];
+
+    for (const file of files) {
+      try {
+        const data = JSON.parse(await file.text());
+        validateTile(data);
+
+        const baseId = file.name.replace(/\.json$/i, "") || "tile";
+        let id = baseId;
+        let suffix = 2;
+
+        while (library.has(id)) {
+          id = `${baseId}_${suffix++}`;
+        }
+
+        const tile = {
+          ...data,
+          name: String(data.name || baseId),
+          roadWidth: Math.max(1, Number(data.roadWidth) || 90)
+        };
+
+        library.set(id, tile);
+
+        if (!selectedTileId) selectedTileId = id;
+        loaded++;
+      } catch (error) {
+        errors.push(`${file.name}: ${error.message}`);
+      }
+    }
+
+    renderTileList();
+    render();
+
+    if (loaded > 0) {
+      setStatus(`Загружено тайлов: ${loaded}. Всего в библиотеке: ${library.size}.`, "good");
+    }
+
+    if (errors.length > 0) {
+      setStatus(
+        (loaded ? `Загружено: ${loaded}. ` : "") +
+        "Не удалось загрузить: " + errors.join(" | "),
+        "warn"
+      );
+    }
+
+    if (loaded === 0 && errors.length === 0) {
+      setStatus("Файлы для загрузки не выбраны.");
+    }
+  }
+
+  function placeSelectedTile(index) {
+    if (!selectedTileId || !library.has(selectedTileId)) {
+      setStatus("Сначала загрузи и выбери тайл в библиотеке.", "warn");
+      return;
+    }
+
+    // Если заменяем тайл, сбрасываем его метки.
+    if (startCell === index) startCell = null;
+    if (finishCell === index) finishCell = null;
+
+    placements[index] = {
+      tileId: selectedTileId,
+      rotation: 0
+    };
+
+    selectedCell = index;
+
+    setStatus("Тайл размещён.", "good");
+    render();
+  }
+
+  function rotateSelectedTile() {
+    if (selectedCell < 0 || !placements[selectedCell]) {
+      setStatus("Сначала выбери клетку с тайлом.", "warn");
+      return;
+    }
+
+    placements[selectedCell].rotation =
+      (placements[selectedCell].rotation + 1) % 4;
+
+    setStatus("Тайл повёрнут на 90° по часовой стрелке.", "good");
+    render();
+  }
+
+  function deleteSelectedTile() {
+    if (selectedCell < 0 || !placements[selectedCell]) return;
+
+    if (startCell === selectedCell) startCell = null;
+    if (finishCell === selectedCell) finishCell = null;
+
+    placements[selectedCell] = null;
+
+    setStatus("Тайл удалён. Метки этого тайла сброшены.", "good");
+    render();
+  }
+
+  function assignStart() {
+    if (selectedCell < 0 || !placements[selectedCell]) {
+      setStatus("Выбери клетку с тайлом для старта.", "warn");
+      return;
+    }
+
+    startCell = selectedCell;
+    setStatus("Старт назначен на вход выбранного тайла.", "good");
+    render();
+  }
+
+  function assignFinish() {
+    if (selectedCell < 0 || !placements[selectedCell]) {
+      setStatus("Выбери клетку с тайлом для финиша.", "warn");
+      return;
+    }
+
+    finishCell = selectedCell;
+    setStatus("Финиш назначен на выход выбранного тайла.", "good");
+    render();
+  }
+
+  function exportTrack() {
+    const tileCatalog = {};
+
+    for (const [id, tile] of library.entries()) {
+      if (placements.some(p => p && p.tileId === id)) {
+        tileCatalog[id] = tile;
+      }
+    }
+
+    const track = {
+      format: "track-layout",
+      version: 2,
+      grid: {
+        rows: GRID,
+        columns: GRID,
+        tileSize: TILE_SIZE
+      },
+      tiles: tileCatalog,
+      start: startCell === null ? null : (() => {
+        const { row, col } = cellCoordinates(startCell);
+        return { row, col, port: "entry" };
+      })(),
+      finish: finishCell === null ? null : (() => {
+        const { row, col } = cellCoordinates(finishCell);
+        return { row, col, port: "exit" };
+      })(),
+      placements: placements.map((placement, index) => {
+        if (!placement) return null;
+
+        const { row, col } = cellCoordinates(index);
+
+        return {
+          row,
+          col,
+          tileId: placement.tileId,
+          rotation: placement.rotation
+        };
+      })
+    };
+
+    const blob = new Blob(
+      [JSON.stringify(track, null, 2)],
+      { type: "application/json" }
+    );
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = "track-layout.json";
+    link.click();
+
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    setStatus("Трасса экспортирована в track-layout.json.", "good");
+  }
+
+  async function importTrackFile(file) {
+    try {
+      const data = JSON.parse(await file.text());
+
+      if (!data || data.format !== "track-layout" ||
+          !data.tiles || !Array.isArray(data.placements)) {
+        throw new Error("Это не файл track-layout.");
+      }
+
+      const rows = Number(data.grid?.rows);
+      const cols = Number(data.grid?.columns);
+
+      if (rows !== GRID || cols !== GRID) {
+        throw new Error(`Ожидается сетка ${GRID} × ${GRID}.`);
+      }
+
+      const nextPlacements = Array(GRID * GRID).fill(null);
+      const nextLibrary = new Map();
+
+      for (const [id, tile] of Object.entries(data.tiles)) {
+        validateTile(tile);
+        nextLibrary.set(id, {
+          ...tile,
+          name: String(tile.name || id),
+          roadWidth: Math.max(1, Number(tile.roadWidth) || 90)
+        });
+      }
+
+      for (const placement of data.placements) {
+        if (!placement) continue;
+
+        const row = Number(placement.row);
+        const col = Number(placement.col);
+        const rotation = Number(placement.rotation);
+        const tileId = placement.tileId;
+
+        if (!Number.isInteger(row) || !Number.isInteger(col) ||
+            row < 0 || row >= GRID || col < 0 || col >= GRID) {
+          throw new Error("Обнаружены некорректные координаты размещения.");
+        }
+
+        if (!Number.isInteger(rotation) || rotation < 0 || rotation > 3) {
+          throw new Error("Некорректный угол поворота тайла.");
+        }
+
+        if (!nextLibrary.has(tileId)) {
+          throw new Error(`Не найден тайл ${tileId}.`);
+        }
+
+        const index = cellIndex(row, col);
+
+        if (nextPlacements[index]) {
+          throw new Error(`Клетка ${row + 1}, ${col + 1} занята дважды.`);
+        }
+
+        nextPlacements[index] = { tileId, rotation };
+      }
+
+      function readEndpoint(endpoint) {
+        if (!endpoint) return null;
+
+        const row = Number(endpoint.row);
+        const col = Number(endpoint.col);
+
+        if (!Number.isInteger(row) || !Number.isInteger(col) ||
+            row < 0 || row >= GRID || col < 0 || col >= GRID) {
+          throw new Error("У метки старта или финиша некорректные координаты.");
+        }
+
+        const index = cellIndex(row, col);
+
+        if (!nextPlacements[index]) {
+          throw new Error("Старт или финиш назначен на пустую клетку.");
+        }
+
+        return index;
+      }
+
+      const nextStart = readEndpoint(data.start);
+      const nextFinish = readEndpoint(data.finish);
+
+      library.clear();
+      for (const [id, tile] of nextLibrary.entries()) {
+        library.set(id, tile);
+      }
+
+      placements = nextPlacements;
+      startCell = nextStart;
+      finishCell = nextFinish;
+      selectedCell = -1;
+      selectedTileId = library.keys().next().value || null;
+
+      renderTileList();
+      render();
+
+      setStatus("Трасса успешно загружена.", "good");
+      setCheckDetails("Запусти проверку соединений, чтобы проверить импортированную трассу.");
+    } catch (error) {
+      setStatus(`Ошибка импорта трассы: ${error.message}`, "bad");
+    }
+  }
+
+  canvas.addEventListener("click", event => {
+    const rect = canvas.getBoundingClientRect();
+    const x = (event.clientX - rect.left) * canvas.width / rect.width;
+    const y = (event.clientY - rect.top) * canvas.height / rect.height;
+    const index = cellAtPoint(x, y);
+
+    if (index < 0) return;
+
+    selectedCell = index;
+
+    if (currentTool === "erase") {
+      if (placements[index]) {
+        deleteSelectedTile();
+      } else {
+        setStatus("В этой клетке нет тайла для удаления.");
+        render();
+      }
+      return;
+    }
+
+    if (placements[index]) {
+      const placement = placements[index];
+      const tile = library.get(placement.tileId);
+
+      if (tile) {
+        selectedTileId = placement.tileId;
+        $("tileSelect").value = selectedTileId;
+        renderTileList();
+        setStatus(`Выбрана клетка с тайлом «${tile.name}».`);
+      }
+    } else if (selectedTileId && library.has(selectedTileId)) {
+      placeSelectedTile(index);
+      return;
+    } else {
+      setStatus("Клетка выбрана. Сначала выбери тайл в библиотеке.");
+    }
+
+    render();
+  });
+
+  $("toolPlace").addEventListener("click", () => setTool("place"));
+  $("toolErase").addEventListener("click", () => setTool("erase"));
+
+  $("loadTiles").addEventListener("click", () => $("tileFiles").click());
+  $("loadTiles2").addEventListener("click", () => $("tileFiles").click());
+
+  $("tileFiles").addEventListener("change", async event => {
+    const files = Array.from(event.target.files || []);
+    if (files.length) await loadTileFiles(files);
+    event.target.value = "";
+  });
+
+  $("tileSelect").addEventListener("change", event => {
+    selectedTileId = event.target.value || null;
+    renderTileList();
+
+    if (selectedTileId) {
+      const tile = library.get(selectedTileId);
+      setStatus(`Выбран тайл «${tile.name}».`);
+    }
+
+    render();
+  });
+
+  $("place").addEventListener("click", () => {
+    if (selectedCell < 0) {
+      setStatus("Сначала выбери клетку на поле.", "warn");
+      return;
+    }
+
+    placeSelectedTile(selectedCell);
+  });
+
+  $("rotate").addEventListener("click", rotateSelectedTile);
+  $("rotateCell").addEventListener("click", rotateSelectedTile);
+  $("delete").addEventListener("click", deleteSelectedTile);
+  $("clearCell").addEventListener("click", deleteSelectedTile);
+
+  $("clearAll").addEventListener("click", () => {
+    if (!confirm("Удалить все тайлы с поля?")) return;
+
+    placements = Array(GRID * GRID).fill(null);
+    selectedCell = -1;
+    startCell = null;
+    finishCell = null;
+
+    setStatus("Поле и метки старта/финиша очищены.", "good");
+    setCheckDetails("Проверка ещё не запускалась.");
+    render();
+  });
+
+  $("setStart").addEventListener("click", assignStart);
+  $("setFinish").addEventListener("click", assignFinish);
+
+  $("clearStart").addEventListener("click", () => {
+    startCell = null;
+    setStatus("Метка старта убрана.");
+    render();
+  });
+
+  $("clearFinish").addEventListener("click", () => {
+    finishCell = null;
+    setStatus("Метка финиша убрана.");
+    render();
+  });
+
+  $("check").addEventListener("click", checkTrack);
+  $("export").addEventListener("click", exportTrack);
+  $("importTrack").addEventListener("click", () => $("trackFile").click());
+
+  $("trackFile").addEventListener("change", async event => {
+    const file = event.target.files[0];
+    if (file) await importTrackFile(file);
+    event.target.value = "";
+  });
+
+  renderTileList();
+  render();
+})();
+</script>
+</body>
+</html>
